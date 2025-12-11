@@ -1,0 +1,181 @@
+
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Algolia Category Helper</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin: 0;
+        padding: 10px;
+        width: 320px;
+        background: #0f172a;
+        color: #e5e7eb;
+      }
+      h1 {
+        font-size: 14px;
+        margin: 0 0 8px;
+      }
+      .field {
+        margin-bottom: 8px;
+        display: flex;
+        flex-direction: column;
+      }
+      label {
+        font-size: 11px;
+        margin-bottom: 2px;
+        color: #9ca3af;
+      }
+      input[type="text"],
+      input[type="password"] {
+        font-size: 12px;
+        padding: 4px 6px;
+        border-radius: 4px;
+        border: 1px solid #374151;
+        background: #020617;
+        color: #e5e7eb;
+      }
+      input[readonly] {
+        opacity: 0.7;
+      }
+      .row {
+        display: flex;
+        gap: 6px;
+        margin-top: 6px;
+      }
+      button {
+        flex: 1;
+        font-size: 11px;
+        padding: 4px 6px;
+        border-radius: 4px;
+        border: none;
+        cursor: pointer;
+        background: #22c55e;
+        color: #022c22;
+        font-weight: 600;
+      }
+      button.secondary {
+        background: #1d4ed8;
+        color: #e5e7eb;
+      }
+      button.warn {
+        background: #b91c1c;
+        color: #fee2e2;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
+      button:hover:not(:disabled) {
+        opacity: 0.9;
+        transform: translateY(-1px);
+      }
+      button {
+        transition: all 0.15s ease;
+      }
+      .status {
+        font-size: 11px;
+        margin-top: 6px;
+        min-height: 16px;
+      }
+      .status.ok {
+        color: #bbf7d0;
+      }
+      .status.err {
+        color: #fecaca;
+      }
+      textarea {
+        width: 100%;
+        min-height: 80px;
+        font-size: 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+          monospace;
+        padding: 4px;
+        border-radius: 4px;
+        border: 1px solid #374151;
+        background: #020617;
+        color: #e5e7eb;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 6px;
+        border-radius: 9999px;
+        font-size: 10px;
+        background: #1f2937;
+        color: #d1fae5;
+      }
+      .pill span.bullet {
+        width: 6px;
+        height: 6px;
+        border-radius: 9999px;
+        background: #6b7280;
+      }
+      .pill.on span.bullet {
+        background: #22c55e;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Algolia Category Helper</h1>
+
+    <div class="pill" id="status-pill">
+      <span class="bullet"></span>
+      <span id="status-pill-text">Idle</span>
+    </div>
+
+    <div class="field">
+      <label>Application ID</label>
+      <input type="text" id="appId" placeholder="MY_APP_ID" />
+    </div>
+    <div class="field">
+      <label>Search API Key (search-only)</label>
+      <input type="password" id="apiKey" placeholder="SEARCH_API_KEY" />
+    </div>
+    <div class="field">
+      <label>Index name (products)</label>
+      <input type="text" id="indexName" placeholder="products_index" />
+    </div>
+
+    <details style="margin-top: 8px;">
+      <summary style="cursor: pointer; font-size: 11px; color: #9ca3af; margin-bottom: 4px;">Advanced field mapping (optional)</summary>
+      <div class="field" style="margin-top: 4px;">
+        <label>Filter field (where to search for category ID)</label>
+        <input type="text" id="filterField" placeholder="facets.categoryIds" />
+      </div>
+      <div class="field">
+        <label>Category name paths (comma-separated)</label>
+        <input type="text" id="categoryPaths" placeholder="information.categories,information.categoriesHierarchy" />
+      </div>
+    </details>
+
+    <div class="field">
+      <label>
+        <input type="checkbox" id="enabled" />
+        Enable lookup & rewrites on Query Categorization pages
+      </label>
+    </div>
+
+    <div class="row">
+      <button id="saveBtn">Save config</button>
+      <button class="secondary" id="refreshBtn">Refresh labels on page</button>
+    </div>
+
+    <div class="field" style="margin-top: 8px;">
+      <label>Export / import mappings (JSON)</label>
+      <textarea id="mappingsArea" placeholder='{"63":"Tech &amp; Audio", ...}'></textarea>
+    </div>
+    <div class="row">
+      <button class="secondary" id="exportBtn">Export</button>
+      <button id="importBtn">Import &amp; merge</button>
+      <button class="warn" id="clearBtn">Clear all</button>
+    </div>
+
+    <div class="status" id="status"></div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

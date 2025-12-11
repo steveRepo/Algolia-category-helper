@@ -1,0 +1,116 @@
+
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Algolia Category Helper · Options</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin: 20px;
+        max-width: 720px;
+        color: #111827;
+      }
+      h1 {
+        font-size: 20px;
+        margin-bottom: 4px;
+      }
+      p {
+        font-size: 13px;
+        color: #4b5563;
+      }
+      .field {
+        margin-top: 10px;
+        display: flex;
+        flex-direction: column;
+      }
+      label {
+        font-size: 12px;
+        margin-bottom: 2px;
+      }
+      input[type="text"],
+      input[type="password"] {
+        font-size: 13px;
+        padding: 6px 8px;
+        border-radius: 4px;
+        border: 1px solid #d1d5db;
+      }
+      textarea {
+        font-size: 12px;
+        padding: 6px 8px;
+        border-radius: 4px;
+        border: 1px solid #d1d5db;
+        min-height: 140px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+          monospace;
+      }
+      button {
+        margin-top: 12px;
+        padding: 6px 10px;
+        font-size: 13px;
+        border-radius: 4px;
+        border: none;
+        background: #0f766e;
+        color: white;
+        cursor: pointer;
+      }
+      .status {
+        margin-top: 8px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Algolia Category Helper</h1>
+    <p>
+      Configure how the extension talks to your product index and manage any manual category ID → label mappings that
+      should be applied on the Query Categorization page.
+    </p>
+
+    <div class="field">
+      <label>Application ID</label>
+      <input type="text" id="appId" />
+    </div>
+    <div class="field">
+      <label>Search API Key (search-only)</label>
+      <input type="password" id="apiKey" />
+    </div>
+    <div class="field">
+      <label>Index name (products)</label>
+      <input type="text" id="indexName" />
+    </div>
+
+    <h2 style="font-size: 16px; margin-top: 20px; margin-bottom: 8px;">Advanced Field Mapping</h2>
+    <p style="font-size: 12px; color: #6b7280; margin-top: 0;">Customize where the extension looks for category data in your products.</p>
+
+    <div class="field">
+      <label>Filter field (where to search for category ID)</label>
+      <input type="text" id="filterField" placeholder="facets.categoryIds" />
+      <p style="font-size: 11px; color: #6b7280; margin: 4px 0 0 0;">Comma-separated for multiple fields, e.g., "facets.categoryIds,categories.id"</p>
+    </div>
+
+    <div class="field">
+      <label>Category name paths (where to find category names)</label>
+      <input type="text" id="categoryPaths" placeholder="information.categories,information.categoriesHierarchy" />
+      <p style="font-size: 11px; color: #6b7280; margin: 4px 0 0 0;">Comma-separated paths using dot notation</p>
+    </div>
+
+    <div class="field">
+      <label>
+        <input type="checkbox" id="enabled" />
+        Enable on Algolia dashboard
+      </label>
+    </div>
+
+    <div class="field">
+      <label>Manual mappings JSON</label>
+      <textarea id="mappingsArea" placeholder='{"63":"Tech &amp; Audio"}'></textarea>
+    </div>
+
+    <button id="saveBtn">Save</button>
+
+    <div class="status" id="status"></div>
+
+    <script src="options.js"></script>
+  </body>
+</html>
