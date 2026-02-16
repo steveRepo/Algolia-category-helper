@@ -5,176 +5,298 @@
     <meta charset="utf-8" />
     <title>Algolia Category Helper</title>
     <style>
-      body {
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      * {
+        box-sizing: border-box;
         margin: 0;
-        padding: 10px;
-        width: 320px;
-        background: #0f172a;
-        color: #e5e7eb;
+        padding: 0;
       }
-      h1 {
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+        width: 340px;
+        background: #fff;
+        color: #21243d;
+        font-size: 13px;
+      }
+
+      /* Header */
+      .header {
+        background: #5468ff;
+        padding: 14px 16px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .header-icon {
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .header-icon svg {
+        width: 28px;
+        height: 28px;
+      }
+      .header-title {
+        color: #fff;
         font-size: 14px;
-        margin: 0 0 8px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
       }
+      .header-pill {
+        margin-left: auto;
+        font-size: 11px;
+        font-weight: 500;
+        padding: 3px 8px;
+        border-radius: 10px;
+        background: rgba(255,255,255,0.2);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .header-pill .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.5);
+      }
+      .header-pill.on .dot {
+        background: #b8f1b0;
+      }
+
+      /* Body */
+      .body {
+        padding: 16px;
+      }
+
+      /* Section */
+      .section-label {
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #848ab8;
+        margin-bottom: 10px;
+      }
+      .section + .section {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid #ebeef6;
+      }
+
+      /* Fields */
       .field {
-        margin-bottom: 8px;
-        display: flex;
-        flex-direction: column;
+        margin-bottom: 10px;
       }
-      label {
-        font-size: 11px;
-        margin-bottom: 2px;
-        color: #9ca3af;
+      .field:last-child {
+        margin-bottom: 0;
       }
-      input[type="text"],
-      input[type="password"] {
+      .field label {
+        display: block;
         font-size: 12px;
-        padding: 4px 6px;
-        border-radius: 4px;
-        border: 1px solid #374151;
-        background: #020617;
-        color: #e5e7eb;
+        font-weight: 500;
+        color: #21243d;
+        margin-bottom: 4px;
       }
-      input[readonly] {
-        opacity: 0.7;
-      }
-      .row {
-        display: flex;
-        gap: 6px;
-        margin-top: 6px;
-      }
-      button {
-        flex: 1;
+      .field .hint {
         font-size: 11px;
-        padding: 4px 6px;
+        color: #848ab8;
+        margin-top: 3px;
+      }
+      .field input[type="text"],
+      .field input[type="password"] {
+        width: 100%;
+        font-size: 12px;
+        padding: 7px 10px;
+        border-radius: 4px;
+        border: 1px solid #d6d9e6;
+        background: #fff;
+        color: #21243d;
+        transition: border-color 0.15s, box-shadow 0.15s;
+        outline: none;
+        font-family: inherit;
+      }
+      .field input[type="text"]:focus,
+      .field input[type="password"]:focus {
+        border-color: #5468ff;
+        box-shadow: 0 0 0 3px rgba(84, 104, 255, 0.1);
+      }
+      .field input[type="text"]::placeholder,
+      .field input[type="password"]::placeholder {
+        color: #b6bbd4;
+      }
+
+      /* Toggle */
+      .toggle-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 0;
+      }
+      .toggle-row span {
+        font-size: 12px;
+        font-weight: 500;
+        color: #21243d;
+      }
+      .toggle {
+        position: relative;
+        width: 36px;
+        height: 20px;
+      }
+      .toggle input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .toggle .slider {
+        position: absolute;
+        cursor: pointer;
+        inset: 0;
+        background: #d6d9e6;
+        border-radius: 20px;
+        transition: background 0.2s;
+      }
+      .toggle .slider::before {
+        content: "";
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        left: 3px;
+        bottom: 3px;
+        background: #fff;
+        border-radius: 50%;
+        transition: transform 0.2s;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+      }
+      .toggle input:checked + .slider {
+        background: #5468ff;
+      }
+      .toggle input:checked + .slider::before {
+        transform: translateX(16px);
+      }
+
+      /* Buttons */
+      .actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 16px;
+      }
+      .btn {
+        flex: 1;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 8px 12px;
         border-radius: 4px;
         border: none;
         cursor: pointer;
-        background: #22c55e;
-        color: #022c22;
-        font-weight: 600;
+        font-family: inherit;
+        transition: background 0.15s, transform 0.1s;
+        text-align: center;
       }
-      button.secondary {
-        background: #1d4ed8;
-        color: #e5e7eb;
+      .btn:active {
+        transform: scale(0.98);
       }
-      button.warn {
-        background: #b91c1c;
-        color: #fee2e2;
-      }
-      button:disabled {
+      .btn:disabled {
         opacity: 0.5;
         cursor: not-allowed;
         pointer-events: none;
       }
-      button:hover:not(:disabled) {
-        opacity: 0.9;
-        transform: translateY(-1px);
+      .btn-primary {
+        background: #5468ff;
+        color: #fff;
       }
-      button {
-        transition: all 0.15s ease;
+      .btn-primary:hover:not(:disabled) {
+        background: #3c4fe0;
       }
+      .btn-secondary {
+        background: #ebeef6;
+        color: #5468ff;
+      }
+      .btn-secondary:hover:not(:disabled) {
+        background: #dde1f1;
+      }
+
+      /* Status */
       .status {
-        font-size: 11px;
-        margin-top: 6px;
+        font-size: 12px;
+        margin-top: 10px;
         min-height: 16px;
+        text-align: center;
       }
       .status.ok {
-        color: #bbf7d0;
+        color: #36b37e;
       }
       .status.err {
-        color: #fecaca;
-      }
-      textarea {
-        width: 100%;
-        min-height: 80px;
-        font-size: 10px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-          monospace;
-        padding: 4px;
-        border-radius: 4px;
-        border: 1px solid #374151;
-        background: #020617;
-        color: #e5e7eb;
-      }
-      .pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        padding: 2px 6px;
-        border-radius: 9999px;
-        font-size: 10px;
-        background: #1f2937;
-        color: #d1fae5;
-      }
-      .pill span.bullet {
-        width: 6px;
-        height: 6px;
-        border-radius: 9999px;
-        background: #6b7280;
-      }
-      .pill.on span.bullet {
-        background: #22c55e;
+        color: #e2294b;
       }
     </style>
   </head>
   <body>
-    <h1>Algolia Category Helper</h1>
-
-    <div class="pill" id="status-pill">
-      <span class="bullet"></span>
-      <span id="status-pill-text">Idle</span>
-    </div>
-
-    <div class="field">
-      <label>Application ID</label>
-      <input type="text" id="appId" placeholder="MY_APP_ID" />
-    </div>
-    <div class="field">
-      <label>Search API Key (search-only)</label>
-      <input type="password" id="apiKey" placeholder="SEARCH_API_KEY" />
-    </div>
-    <div class="field">
-      <label>Index name (products)</label>
-      <input type="text" id="indexName" placeholder="products_index" />
-    </div>
-
-    <details style="margin-top: 8px;">
-      <summary style="cursor: pointer; font-size: 11px; color: #9ca3af; margin-bottom: 4px;">Advanced field mapping (optional)</summary>
-      <div class="field" style="margin-top: 4px;">
-        <label>Filter field (where to search for category ID)</label>
-        <input type="text" id="filterField" placeholder="facets.categoryIds" />
+    <!-- Header bar -->
+    <div class="header">
+      <div class="header-icon">
+        <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill-rule="evenodd"><path d="M38.67 15.482v-2.047c-.001-1.43-1.245-2.6-2.78-2.6h-6.477c-1.534 0-2.777 1.158-2.78 2.6v2.1c0 .234.232.398.485.343 1.832-.493 3.73-.743 5.637-.74a21.96 21.96 0 0 1 5.445.686c.235.055.467-.107.467-.343m-17.75 2.68L19.8 17.13a2.88 2.88 0 0 0-1.964-.76c-.737 0-1.443.273-1.964.76l-1.323 1.23c-.522.484-.816 1.142-.816 1.83s.294 1.345.816 1.83l1.088 1.015c.176.162.43.124.584-.037.642-.822 1.35-1.597 2.12-2.318.776-.726 1.614-1.4 2.507-2 .194-.1.213-.363.06-.527m11.82 6.498v8.853c0 .254.293.435.544.308l8.44-4.073c.192-.1.25-.308.155-.487-1.75-2.862-4.997-4.817-8.75-4.944-.195 0-.4.144-.4.343m0 21.326c-7.037 0-12.755-5.324-12.755-11.877S25.7 22.234 32.738 22.234s12.755 5.322 12.755 11.874-5.696 11.877-12.755 11.877m0-28.747c-9.995 0-18.1 7.55-18.1 16.87s8.107 16.855 18.1 16.855 18.1-7.55 18.1-16.873-8.088-16.853-18.1-16.853" fill="#fff"/></svg>
       </div>
-      <div class="field">
-        <label>Category name paths (comma-separated)</label>
-        <input type="text" id="categoryPaths" placeholder="information.categories,information.categoriesHierarchy" />
+      <span class="header-title">Category Helper</span>
+      <div class="header-pill" id="status-pill">
+        <span class="dot"></span>
+        <span id="status-pill-text">Idle</span>
       </div>
-    </details>
-
-    <div class="field">
-      <label>
-        <input type="checkbox" id="enabled" />
-        Enable lookup & rewrites on Query Categorization pages
-      </label>
     </div>
 
-    <div class="row">
-      <button id="saveBtn">Save config</button>
-      <button class="secondary" id="refreshBtn">Refresh labels on page</button>
-    </div>
+    <div class="body">
+      <!-- Connection settings -->
+      <div class="section">
+        <div class="section-label">Connection</div>
+        <div class="field">
+          <label>Application ID</label>
+          <input type="text" id="appId" placeholder="Your Algolia App ID" />
+        </div>
+        <div class="field">
+          <label>Search API Key</label>
+          <input type="password" id="apiKey" placeholder="Search-only API key" />
+        </div>
+        <div class="field">
+          <label>Index Name</label>
+          <input type="text" id="indexName" placeholder="your_product_index" />
+        </div>
+      </div>
 
-    <div class="field" style="margin-top: 8px;">
-      <label>Export / import mappings (JSON)</label>
-      <textarea id="mappingsArea" placeholder='{"63":"Tech &amp; Audio", ...}'></textarea>
-    </div>
-    <div class="row">
-      <button class="secondary" id="exportBtn">Export</button>
-      <button id="importBtn">Import &amp; merge</button>
-      <button class="warn" id="clearBtn">Clear all</button>
-    </div>
+      <!-- Field mapping -->
+      <div class="section">
+        <div class="section-label">Field Mapping</div>
+        <div class="field">
+          <label>Filter Field</label>
+          <input type="text" id="filterField" placeholder="e.g. facets.id" />
+          <div class="hint">Attribute used to look up a category ID in your index</div>
+        </div>
+        <div class="field">
+          <label>Category Name Paths</label>
+          <input type="text" id="categoryPaths" placeholder="e.g. categories,categoriesHierarchy" />
+          <div class="hint">Comma-separated paths to extract the human-readable name</div>
+        </div>
+      </div>
 
-    <div class="status" id="status"></div>
+      <!-- Enable toggle -->
+      <div class="section">
+        <div class="toggle-row">
+          <span>Enable on dashboard</span>
+          <label class="toggle">
+            <input type="checkbox" id="enabled" />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="actions">
+        <button class="btn btn-primary" id="saveBtn">Save</button>
+        <button class="btn btn-secondary" id="refreshBtn">Refresh Page</button>
+      </div>
+
+      <div class="status" id="status"></div>
+    </div>
 
     <script src="popup.js"></script>
   </body>

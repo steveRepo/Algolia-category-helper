@@ -2,41 +2,17 @@
 
 ## Overview
 
-The Algolia Category Helper extension now supports **configurable field mapping**, making it work with different data structures across different customers.
+The extension needs two pieces of information to map category IDs to names:
 
-## Default Configuration
+1. **Filter Field** -- which attribute in your index contains the category ID
+2. **Category Name Paths** -- where to find the human-readable name once a matching record is found
 
-By default, the extension is configured for this structure:
+Browse a record in your Algolia dashboard to identify the correct paths for your data.
 
-```json
-{
-  "information": {
-    "categories": [
-      { "id": "63", "name": "Tech & Audio" },
-      { "id": "64", "name": "Home & Garden" }
-    ],
-    "categoriesHierarchy": [
-      [
-        { "id": "63", "name": "Tech & Audio" },
-        { "id": "6331", "name": "Headphones" }
-      ]
-    ]
-  },
-  "facets": {
-    "categoryIds": ["63", "6331", "64"]
-  }
-}
-```
+## Examples
 
-**Default settings:**
-- **Filter field**: `facets.categoryIds`
-- **Category name paths**: `information.categories,information.categoriesHierarchy`
+### Simple categories array
 
-## Custom Configurations
-
-### Example 1: Simple Categories Array
-
-If your data looks like:
 ```json
 {
   "categories": [
@@ -46,13 +22,11 @@ If your data looks like:
 }
 ```
 
-**Configure:**
-- **Filter field**: `category_ids`
-- **Category name paths**: `categories`
+- **Filter Field**: `category_ids`
+- **Category Name Paths**: `categories`
 
-### Example 2: Nested Category Object
+### Nested category object
 
-If your data looks like:
 ```json
 {
   "product": {
@@ -65,13 +39,11 @@ If your data looks like:
 }
 ```
 
-**Configure:**
-- **Filter field**: `product.category.categoryId`
-- **Category name paths**: `product.category`
+- **Filter Field**: `product.category.categoryId`
+- **Category Name Paths**: `product.category`
 
-### Example 3: Multiple Category Sources
+### Multiple category sources
 
-If your data has categories in multiple places:
 ```json
 {
   "primaryCategory": { "id": "cat_123", "name": "Electronics" },
@@ -83,13 +55,11 @@ If your data has categories in multiple places:
 }
 ```
 
-**Configure:**
-- **Filter field**: `categoryIds`
-- **Category name paths**: `primaryCategory,allCategories`
+- **Filter Field**: `categoryIds`
+- **Category Name Paths**: `primaryCategory,allCategories`
 
-### Example 4: Flat Category Structure
+### Flat key-value structure
 
-If categories are stored as simple key-value pairs:
 ```json
 {
   "category_id": "cat_123",
@@ -97,86 +67,65 @@ If categories are stored as simple key-value pairs:
 }
 ```
 
-**Configure:**
-- **Filter field**: `category_id`
-- **Category name paths**: `category_name`
+- **Filter Field**: `category_id`
+- **Category Name Paths**: `category_name`
 
-## How It Works
+### Hierarchy with nested arrays
+
+```json
+{
+  "information": {
+    "categories": [
+      { "id": "63", "name": "Tech & Audio" }
+    ],
+    "categoriesHierarchy": [
+      [
+        { "id": "63", "name": "Tech & Audio" },
+        { "id": "6331", "name": "Headphones" }
+      ]
+    ]
+  },
+  "facets": {
+    "categoryIds": ["63", "6331"]
+  }
+}
+```
+
+- **Filter Field**: `facets.categoryIds`
+- **Category Name Paths**: `information.categories,information.categoriesHierarchy`
+
+## How the fields work
 
 ### Filter Field
-The **filter field** tells the extension where to search for the category ID in your Algolia index. This is used when querying the index to find products with a specific category ID.
+
+Tells the extension which attribute to query when looking up a category ID.
 
 - Supports **dot notation** for nested fields: `facets.categoryIds`
 - Supports **multiple fields** (comma-separated): `categoryIds,facets.categoryIds`
-- The extension will search: `WHERE categoryIds:"63" OR facets.categoryIds:"63"`
+- Multiple fields use OR logic: `WHERE categoryIds:"63" OR facets.categoryIds:"63"`
+- Must be a **faceted** or **searchable** attribute in your index settings
 
 ### Category Name Paths
-The **category name paths** tell the extension where to look for the category name once it finds a matching product.
 
-- Supports **dot notation** for nested fields: `information.categories`
-- Supports **multiple paths** (comma-separated) - will try each in order
-- Supports **arrays of objects** with `id` and `name` properties
-- Supports **nested arrays** (like hierarchy structures)
-- Supports **simple objects** with `id` and `name` properties
-- Supports **plain string values**
+Tells the extension where to extract the label from the returned record.
 
-## Testing Your Configuration
-
-1. **Configure the extension** with your custom field mappings
-2. **Save the configuration**
-3. **Navigate to the Query Categorization page** in the Algolia dashboard
-4. **Open browser console** (F12)
-5. **Look for logs** from `[Algolia Category Helper][bg]`
-   - Should see: "Fetching labels for X IDs in batches"
-   - Should see: "Found X labels out of Y requested"
-6. **Check for errors** - if no labels are found, adjust your paths
+- Supports **dot notation**: `information.categories`
+- Supports **multiple paths** (comma-separated) -- tries each in order until a match is found
+- Handles **arrays of objects** with `id` and `name` properties
+- Handles **nested arrays** (hierarchy structures)
+- Handles **simple objects** with `id` and `name`
+- Handles **plain string values**
 
 ## Troubleshooting
 
-### No labels are being found
+### No labels found
 
-1. **Check your index structure**:
-   - Go to your Algolia dashboard
-   - Browse a product record
-   - Note the exact field paths where category IDs and names are stored
+1. Go to your Algolia dashboard and browse a product record
+2. Note the exact field paths where category IDs and names are stored
+3. Update **Filter Field** and **Category Name Paths** in the extension
+4. Field names are case-sensitive
 
-2. **Verify filter field**:
-   - The filter field should be a **faceted attribute** or **searchable attribute**
-   - Check your index configuration
+### Filter field not working
 
-3. **Check category name paths**:
-   - Use exact dot notation paths
-   - Match case-sensitive field names
-   - Try one path at a time to isolate issues
-
-### Labels found but not displaying
-
-1. **Check browser console** for content script logs
-2. **Verify the extension is enabled**
-3. **Reload the Query Categorization page**
-
-## Support for Different Data Structures
-
-The extension now supports:
-- ✅ Nested objects (using dot notation)
-- ✅ Arrays of objects with id/name
-- ✅ Nested arrays (hierarchy structures)
-- ✅ Multiple search paths (tries each in order)
-- ✅ Multiple filter fields (OR logic)
-- ✅ Plain string values
-- ✅ Mixed structures
-
-## Manual Mappings Fallback
-
-If automatic lookup doesn't work for certain categories, you can always add manual mappings:
-
-1. **Export current mappings** from the popup
-2. **Edit the JSON** to add missing mappings:
-   ```json
-   {
-     "63": "Tech & Audio",
-     "64": "Home & Garden",
-     "custom_cat_123": "My Custom Category"
-   }
-   ```
-3. **Import & merge** back into the extension
+- The attribute must be configured as a **facet** or **filter** in your index settings
+- Check your index configuration under **Configuration > Filtering and Faceting**

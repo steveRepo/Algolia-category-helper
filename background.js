@@ -7,8 +7,15 @@ const STORAGE_KEYS = {
   MAPPINGS: 'algoliaCategoryHelper_mappings'
 };
 
-function log(...args) {
-  console.log('[Algolia Category Helper][bg]', ...args);
+// Security: max IDs per single lookup request to prevent quota abuse
+const MAX_IDS_PER_REQUEST = 100;
+// Rate limit: minimum ms between batch API calls
+const BATCH_DELAY_MS = 200;
+
+// Validate that a field path only contains safe characters: a-z, 0-9, dots, underscores, commas, hyphens
+function isValidFieldPath(path) {
+  if (!path || typeof path !== 'string') return false;
+  return /^[a-zA-Z0-9._,\-]+$/.test(path.trim());
 }
 
 // Helper to get config & mappings
@@ -20,8 +27,8 @@ async function getState() {
           appId: '',
           apiKey: '',
           indexName: '',
-          filterField: 'facets.categoryIds',
-          categoryPaths: 'information.categories,information.categoriesHierarchy',
+          filterField: '',
+          categoryPaths: '',
           enabled: false
         },
         mappings: res[STORAGE_KEYS.MAPPINGS] || {}
@@ -36,8 +43,19 @@ async function setMappings(newMappings) {
   });
 }
 
+// Delay helper for rate limiting
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // Listen for messages from content-script & popup/options
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // Security: only accept messages from this extension
+  if (sender.id !== chrome.runtime.id) {
+    sendResponse({ success: false, error: 'Unauthorized sender' });
+    return true;
+  }
+
   (async () => {
     if (msg.type === 'GET_STATE') {
       const state = await getState();
@@ -59,6 +77,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             });
             return;
           }
+
+          // Validate field paths contain only safe characters
+          if (config.filterField && !isValidFieldPath(config.filterField)) {
+            sendResponse({
+              success: false,
+              error: 'Filter field contains invalid characters. Only letters, numbers, dots, underscores, commas, and hyphens are allowed.'
+            });
+            return;
+          }
+          if (config.categoryPaths && !isValidFieldPath(config.categoryPaths)) {
+            sendResponse({
+              success: false,
+              error: 'Category paths contain invalid characters. Only letters, numbers, dots, underscores, commas, and hyphens are allowed.'
+            });
+            return;
+          }
         }
 
         await new Promise((resolve, reject) => {
@@ -71,49 +105,64 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           });
         });
 
-        log('Config saved:', config);
-        sendResponse({ success: true, config });
+        sendResponse({ success: true });
       } catch (e) {
-        log('Error saving config:', e);
         sendResponse({ success: false, error: e.message });
       }
       return;
     }
 
-    if (msg.type === 'SET_MAPPINGS') {
-      await setMappings(msg.mappings || {});
-      sendResponse({ success: true });
-      return;
-    }
-
     if (msg.type === 'ALGOLIA_LOOKUP') {
-      // msg.ids is an array of category IDs (strings)
       const { config, mappings } = await getState();
-      if (!config.enabled || !config.appId || !config.apiKey || !config.indexName) {
+      if (!config.enabled || !config.appId || !config.apiKey || !config.indexName || !config.filterField || !config.categoryPaths) {
         sendResponse({ success: false, error: 'Config not complete or extension disabled.' });
         return;
       }
 
-      const idsToFetch = (msg.ids || []).filter((id) => !mappings[id]);
+      // Validate field paths before making API calls
+      if (!isValidFieldPath(config.filterField) || !isValidFieldPath(config.categoryPaths)) {
+        sendResponse({ success: false, error: 'Invalid field paths in config.' });
+        return;
+      }
+
+      // Security: validate msg.ids is an array of strings, sanitise values
+      const rawIds = msg.ids;
+      if (!Array.isArray(rawIds)) {
+        sendResponse({ success: false, error: 'Invalid IDs format.' });
+        return;
+      }
+
+      const sanitisedIds = rawIds
+        .filter((id) => typeof id === 'string' && id.length > 0 && id.length <= 200)
+        .map((id) => id.trim())
+        .filter((id) => /^[a-zA-Z0-9_\-]+$/.test(id));
+
+      const idsToFetch = sanitisedIds
+        .filter((id) => !mappings[id])
+        .slice(0, MAX_IDS_PER_REQUEST); // Cap to prevent quota abuse
+
       if (!idsToFetch.length) {
         sendResponse({ success: true, labels: mappings });
         return;
       }
 
       // Algolia multi-query API has limits, so batch requests
-      const BATCH_SIZE = 20; // Conservative limit
+      const BATCH_SIZE = 20;
       const newLabels = {};
 
       try {
-        log(`Fetching labels for ${idsToFetch.length} IDs in batches of ${BATCH_SIZE}`);
 
         for (let i = 0; i < idsToFetch.length; i += BATCH_SIZE) {
           const batch = idsToFetch.slice(i, i + BATCH_SIZE);
-          log(`Processing batch ${Math.floor(i / BATCH_SIZE) + 1} with ${batch.length} IDs`);
+
+          // Rate limit: delay between batches (skip delay on first batch)
+          if (i > 0) {
+            await delay(BATCH_DELAY_MS);
+          }
 
           // Build multi-query: one query per ID, using configurable filter field
-          const filterField = config.filterField || 'facets.categoryIds';
-          const categoryPaths = config.categoryPaths || 'information.categories,information.categoriesHierarchy';
+          const filterField = config.filterField;
+          const categoryPaths = config.categoryPaths;
           const pathsArray = categoryPaths.split(',').map(p => p.trim()).filter(p => p);
 
           const requests = batch.map((id) => {
@@ -144,9 +193,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           });
 
           if (!res.ok) {
-            const text = await res.text();
-            log('Algolia lookup failed for batch', res.status, text);
-            log('Batch IDs:', batch);
             // Continue with other batches even if one fails
             continue;
           }
@@ -157,7 +203,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           // Extract labels from this batch using configured paths
           results.forEach((r, idx) => {
             const id = batch[idx];
-            const hit = (r.hits && r.hits[0]) || null;
+            if (!r || !Array.isArray(r.hits)) return;
+            const hit = r.hits[0] || null;
             if (!hit) return;
 
             let label = null;
@@ -185,7 +232,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 // Try flat array first
                 const match = value.find((item) => item && String(item.id) === String(id));
                 if (match && match.name) {
-                  label = match.name;
+                  label = String(match.name);
                   continue;
                 }
 
@@ -194,7 +241,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                   if (Array.isArray(subArray)) {
                     const nestedMatch = subArray.find((item) => item && String(item.id) === String(id));
                     if (nestedMatch && nestedMatch.name) {
-                      label = nestedMatch.name;
+                      label = String(nestedMatch.name);
                       break;
                     }
                   }
@@ -202,7 +249,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               }
               // If it's a simple object with id/name
               else if (value && typeof value === 'object' && String(value.id) === String(id)) {
-                label = value.name || null;
+                label = value.name ? String(value.name) : null;
               }
               // If it's just a string value
               else if (typeof value === 'string') {
@@ -210,13 +257,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               }
             }
 
-            if (label) {
+            // Sanitise label: must be a non-empty string, cap length
+            if (label && typeof label === 'string' && label.length <= 500) {
               newLabels[id] = label;
             }
           });
         }
 
-        log(`Found ${Object.keys(newLabels).length} labels out of ${idsToFetch.length} requested`);
 
         const updated = { ...mappings, ...newLabels };
         await setMappings(updated);
@@ -226,7 +273,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           const total = Object.keys(updated).length;
           chrome.action.setBadgeText({ text: total ? 'ON' : '' });
           if (total) {
-            chrome.action.setBadgeBackgroundColor({ color: '#0f766e' }); // teal-ish
+            chrome.action.setBadgeBackgroundColor({ color: '#5468ff' });
           }
         } catch (e) {
           // ignore in older browsers
@@ -234,8 +281,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
         sendResponse({ success: true, labels: updated, fetched: newLabels });
       } catch (e) {
-        log('Algolia lookup exception', e);
-        sendResponse({ success: false, error: e && e.message ? e.message : String(e) });
+        sendResponse({ success: false, error: 'Lookup failed' });
       }
 
       return;

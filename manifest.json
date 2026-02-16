@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Algolia Category Helper",
-  "version": "1.0.0",
+  "version": "1.1",
   "description": "Map numeric/category IDs to labels on Algolia Query Categorization pages using local JSON or Algolia API.",
   "permissions": [
     "storage",
@@ -12,9 +12,18 @@
     "https://*.algolia.net/*",
     "https://*.algolia.com/*"
   ],
+  "icons": {
+    "16": "icon.svg",
+    "48": "icon.svg",
+    "128": "icon.svg"
+  },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Algolia Category Helper"
+    "default_title": "Algolia Category Helper",
+    "default_icon": "icon.svg"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
   },
   "background": {
     "service_worker": "background.js",

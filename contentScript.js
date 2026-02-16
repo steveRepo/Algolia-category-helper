@@ -7,8 +7,13 @@ const STORAGE_KEYS = {
   MAPPINGS: 'algoliaCategoryHelper_mappings'
 };
 
-function csLog(...args) {
-  console.log('[Algolia Category Helper][cs]', ...args);
+// Check if extension context is still valid (becomes invalid after extension reload/update)
+function isContextValid() {
+  try {
+    return !!chrome.runtime && !!chrome.runtime.id;
+  } catch (e) {
+    return false;
+  }
 }
 
 function isLikelyCategoryId(text) {
@@ -22,16 +27,33 @@ function isLikelyCategoryId(text) {
   return true;
 }
 
-// Cache mappings in the content script for faster access
+// Security: cap IDs sent per lookup cycle to prevent quota abuse
+const MAX_IDS_PER_CYCLE = 100;
+
+// Cache mappings and config in the content script for faster access
 let cachedMappings = {};
+let cachedEnabled = false;
 let lastAppliedVersion = 0;
 
-async function loadMappings() {
+async function loadState() {
+  if (!isContextValid()) {
+    return { mappings: cachedMappings, enabled: cachedEnabled };
+  }
   return new Promise((resolve) => {
-    chrome.storage.local.get([STORAGE_KEYS.MAPPINGS], (res) => {
-      cachedMappings = res[STORAGE_KEYS.MAPPINGS] || {};
-      resolve(cachedMappings);
-    });
+    try {
+      chrome.storage.local.get([STORAGE_KEYS.CONFIG, STORAGE_KEYS.MAPPINGS], (res) => {
+        if (chrome.runtime.lastError) {
+          resolve({ mappings: cachedMappings, enabled: cachedEnabled });
+          return;
+        }
+        cachedMappings = res[STORAGE_KEYS.MAPPINGS] || {};
+        const config = res[STORAGE_KEYS.CONFIG] || {};
+        cachedEnabled = !!config.enabled;
+        resolve({ mappings: cachedMappings, enabled: cachedEnabled });
+      });
+    } catch (e) {
+      resolve({ mappings: cachedMappings, enabled: cachedEnabled });
+    }
   });
 }
 
@@ -126,48 +148,46 @@ function applyLabelsToDom(nodes, mappings) {
     appliedCount++;
   });
 
-  if (appliedCount) {
-    csLog(`Applied ${appliedCount} label(s) to DOM`);
-  }
 }
 
 // Ask background for labels for any unknown IDs, then apply labels.
 async function updateLabels() {
+  const { mappings, enabled } = await loadState();
+  if (!enabled) return;
+
   const nodes = findCategoryNodes();
-  if (!nodes.length) {
-    csLog('No candidate category nodes found on this view.');
-    csLog('Page title:', document.title);
-    csLog('URL:', window.location.href);
-    return;
-  }
+  if (!nodes.length) return;
 
   const ids = Array.from(new Set(nodes.map((p) => p.id)));
-  const contextBreakdown = nodes.reduce((acc, n) => {
-    acc[n.context] = (acc[n.context] || 0) + 1;
-    return acc;
-  }, {});
 
-  csLog('Found category IDs:', ids);
-  csLog('Found nodes by context:', contextBreakdown);
-  csLog(`Total: ${ids.length} unique IDs from ${nodes.length} nodes`);
-
-  await loadMappings();
-
-  const missing = ids.filter((id) => !cachedMappings[id]);
+  // Cap the number of IDs sent per cycle to prevent quota abuse
+  const missing = ids.filter((id) => !cachedMappings[id]).slice(0, MAX_IDS_PER_CYCLE);
   let stateResult = { success: true };
 
   if (missing.length) {
-    csLog('Requesting Algolia lookup for missing IDs:', missing);
+    if (!isContextValid()) {
+      applyLabelsToDom(nodes, cachedMappings);
+      return;
+    }
+
     stateResult = await new Promise((resolve) => {
-      chrome.runtime.sendMessage(
-        { type: 'ALGOLIA_LOOKUP', ids: missing },
-        (res) => resolve(res || { success: false, error: 'No response' })
-      );
+      try {
+        chrome.runtime.sendMessage(
+          { type: 'ALGOLIA_LOOKUP', ids: missing },
+          (res) => {
+            if (chrome.runtime.lastError) {
+              resolve({ success: false, error: chrome.runtime.lastError.message });
+              return;
+            }
+            resolve(res || { success: false, error: 'No response' });
+          }
+        );
+      } catch (e) {
+        resolve({ success: false, error: 'Extension context invalidated' });
+      }
     });
 
-    if (!stateResult.success) {
-      csLog('Algolia lookup failed:', stateResult.error);
-    } else {
+    if (stateResult.success) {
       cachedMappings = stateResult.labels || cachedMappings;
     }
   }
@@ -175,32 +195,27 @@ async function updateLabels() {
   applyLabelsToDom(nodes, cachedMappings);
 
   // Notify badge we have successfully applied mappings
-  try {
-    const applied = Object.keys(cachedMappings || {}).length;
-    chrome.action.setBadgeText({ text: applied ? 'ON' : '' });
-    if (applied) {
-      chrome.action.setBadgeBackgroundColor({ color: '#0f766e' });
+  if (isContextValid()) {
+    try {
+      const applied = Object.keys(cachedMappings || {}).length;
+      chrome.action.setBadgeText({ text: applied ? 'ON' : '' });
+      if (applied) {
+        chrome.action.setBadgeBackgroundColor({ color: '#5468ff' });
+      }
+    } catch (e) {
+      // ignore — context may have been lost between check and call
     }
-  } catch (e) {
-    // ignore
   }
 }
 
 function setupMutationObserver() {
   const target = document.querySelector('main') || document.body;
-  if (!target) {
-    csLog('No target element found for mutation observer');
-    return;
-  }
-
-  csLog('Setting up mutation observer on:', target.tagName);
+  if (!target) return;
 
   const observer = new MutationObserver((mutations) => {
-    // Simple debounce: if many mutations fire, we only run once every 500ms
     const now = Date.now();
     if (now - lastAppliedVersion < 500) return;
     lastAppliedVersion = now;
-    csLog('Mutation detected, running updateLabels');
     updateLabels();
   });
 
@@ -216,20 +231,17 @@ const MAX_RETRIES = 10; // Try for up to 10 seconds
 const RETRY_INTERVAL = 1000; // 1 second
 
 function retryUpdateLabels() {
-  csLog(`Retry attempt ${retryCount + 1}/${MAX_RETRIES}`);
+  if (!isContextValid()) return;
   updateLabels();
 
   retryCount++;
   if (retryCount < MAX_RETRIES) {
     setTimeout(retryUpdateLabels, RETRY_INTERVAL);
-  } else {
-    csLog('Max retries reached, relying on mutation observer');
   }
 }
 
 // Kick-off when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-  csLog('Content script loaded (DOMContentLoaded)');
   updateLabels();
   setupMutationObserver();
 
@@ -239,9 +251,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Also run once on initial injection (in case DOMContentLoaded already fired)
 if (document.readyState === 'loading') {
-  csLog('Document still loading, waiting for DOMContentLoaded');
+  // Wait for DOMContentLoaded event
 } else {
-  csLog('Content script loaded (document already ready)');
   updateLabels();
   setupMutationObserver();
 
