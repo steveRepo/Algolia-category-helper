@@ -1,6 +1,17 @@
 # Algolia Category Helper
 
-A Chrome extension that replaces numeric category IDs with human-readable names on the Algolia Query Categorization dashboard.
+## The Problem
+
+The Algolia Query Categorization dashboard displays category IDs as raw numeric or alphanumeric codes (e.g. `63`, `1024`, `electronics-5`). When you're reviewing how queries are being categorized, these IDs are meaningless without constantly cross-referencing your own data to figure out what each one represents.
+
+This makes it difficult to:
+- Quickly assess whether queries are being categorized correctly
+- Spot miscategorized queries at a glance
+- Share categorization results with non-technical stakeholders
+
+## The Solution
+
+This Chrome extension automatically replaces category IDs with their human-readable names directly on the dashboard. Instead of seeing `63`, you see `Tech & Audio (63)`. It looks up category names from your own Algolia index using a search-only API key, caches them locally, and applies them in real time as you navigate.
 
 ## Installation
 
@@ -42,7 +53,19 @@ Flip the **Enable on dashboard** toggle and click **Save**.
 2. Category IDs like `63` will automatically be replaced with labels like `Tech & Audio (63)`
 3. The extension watches for page changes and re-applies labels as you navigate
 
-Use the **Refresh Page** button in the popup to manually re-trigger label replacement.
+Use the **Refresh Page** button in the popup to reload the dashboard tab.
+
+## API Usage & Quota
+
+This extension uses your **search-only API key** to look up category names. The impact on your Algolia quota is minimal:
+
+- Each category ID is looked up **once** and then cached locally in your browser
+- Subsequent page loads use the cache and make **zero API calls**
+- A typical first visit fetches 20–50 IDs in 1–3 multi-query requests (each with `hitsPerPage: 1`)
+- Requests are batched (20 per call) with rate limiting between batches
+- A hard cap of **100 IDs per cycle** prevents runaway usage
+
+In practice, the extension adds a handful of search operations on first use and essentially nothing after that.
 
 ## Troubleshooting
 
@@ -52,7 +75,7 @@ Use the **Refresh Page** button in the popup to manually re-trigger label replac
 2. Verify your **Algolia credentials** are correct
 3. Confirm the **index name** matches your product index
 4. Check **Filter Field** and **Category Name Paths** match your index structure
-5. Open the browser console (F12) and look for `[Algolia Category Helper]` logs
+5. Try clicking **Refresh Page** in the popup to reload the dashboard
 
 ### Common API errors
 
