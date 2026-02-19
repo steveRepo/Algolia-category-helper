@@ -124,30 +124,13 @@ document.getElementById('saveBtn').addEventListener('click', () => {
 });
 
 document.getElementById('refreshBtn').addEventListener('click', () => {
-  setStatus('Refreshing...');
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     const tab = tabs[0];
     if (!tab || !tab.id) {
       setStatus('No active tab', true);
       return;
     }
-    chrome.scripting.executeScript(
-      {
-        target: { tabId: tab.id },
-        func: () => {
-          if (window.updateLabels) {
-            window.updateLabels();
-          }
-        }
-      },
-      () => {
-        if (chrome.runtime.lastError) {
-          setStatus('Could not refresh in this tab', true);
-        } else {
-          setStatus('Refresh requested');
-        }
-      }
-    );
+    chrome.tabs.reload(tab.id);
   });
 });
 
