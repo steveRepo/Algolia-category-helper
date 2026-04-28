@@ -1,10 +1,13 @@
 # Algolia Category Helper
 
+*Updated with AI record attribute helper
+
 ## The Problem
 
 The Algolia Query Categorization dashboard displays category IDs as raw numeric or alphanumeric codes (e.g. `63`, `1024`, `electronics-5`). When you're reviewing how queries are being categorized, these IDs are meaningless without constantly cross-referencing your own data to figure out what each one represents.
 
 This makes it difficult to:
+
 - Quickly assess whether queries are being categorized correctly
 - Spot miscategorized queries at a glance
 - Share categorization results with non-technical stakeholders
@@ -26,19 +29,19 @@ Click the extension icon in your toolbar to open the popup.
 
 ### Connection
 
-| Field | Description |
-|---|---|
-| **Application ID** | Your Algolia application ID |
-| **Search API Key** | A search-only API key (never use an admin key) |
-| **Index Name** | The index containing your product/category data |
+| Field                    | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| **Application ID** | Your Algolia application ID                     |
+| **Search API Key** | A search-only API key (never use an admin key)  |
+| **Index Name**     | The index containing your product/category data |
 
 ### Field Mapping
 
 These fields tell the extension where to find category data in your index. Browse a record in your Algolia dashboard to identify the correct paths.
 
-| Field | Description | Example |
-|---|---|---|
-| **Filter Field** | The attribute used to look up a category ID | `facets.categoryIds` |
+| Field                         | Description                                                   | Example                                                    |
+| ----------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------- |
+| **Filter Field**        | The attribute used to look up a category ID                   | `facets.categoryIds`                                     |
 | **Category Name Paths** | Comma-separated dot-notation paths to the human-readable name | `information.categories,information.categoriesHierarchy` |
 
 See [FIELD_MAPPING_GUIDE.md](./FIELD_MAPPING_GUIDE.md) for examples of different data structures.
@@ -79,10 +82,10 @@ In practice, the extension adds a handful of search operations on first use and 
 
 ### Common API errors
 
-| Status | Meaning |
-|---|---|
+| Status        | Meaning                                |
+| ------------- | -------------------------------------- |
 | **403** | API key doesn't have search permission |
-| **404** | Index name is incorrect |
+| **404** | Index name is incorrect                |
 
 ### Labels not updating
 
@@ -95,7 +98,6 @@ Refresh the Algolia dashboard tab, or click **Refresh Page** in the popup.
 - Field paths are validated to prevent injection
 - The extension only runs on `dashboard.algolia.com`
 
-
 ## Merch Studio support
 
 This build also supports selected Algolia Merch Studio pages:
@@ -105,7 +107,6 @@ This build also supports selected Algolia Merch Studio pages:
 - Analytics → Search → Grouped Searches
 
 On these pages, the extension detects category text from the page structure or URL refinements and adds lightweight metadata/highlighting to the matching category labels.
-
 
 ## OpenAI mapping assist
 
@@ -118,7 +119,6 @@ The popup now includes an optional OpenAI-assisted field suggestion flow.
 5. Click **Apply suggestion** to populate the form, then **Save**.
 
 This is intended to help identify likely dot-notation paths for category IDs and human-readable category labels from a copied record structure.
-
 
 ## v1.4 hardening and Merch Studio updates
 
