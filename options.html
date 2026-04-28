@@ -1,15 +1,10 @@
-
 <!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
     <title>Algolia Category Helper · Options</title>
     <style>
-      * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
       body {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
         background: #f5f5fa;
@@ -17,42 +12,20 @@
         font-size: 14px;
         min-height: 100vh;
       }
-
-      /* Header */
-      .header {
-        background: #5468ff;
-        padding: 20px 24px;
-      }
-      .header-inner {
-        max-width: 600px;
-        margin: 0 auto;
-      }
-      .header h1 {
-        color: #fff;
-        font-size: 18px;
-        font-weight: 600;
-        margin-bottom: 4px;
-      }
-      .header p {
-        color: rgba(255,255,255,0.7);
-        font-size: 13px;
-      }
-
-      /* Card */
+      .header { background: #5468ff; padding: 20px 24px; }
+      .header-inner { max-width: 700px; margin: 0 auto; }
+      .header h1 { color: #fff; font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+      .header p { color: rgba(255,255,255,0.7); font-size: 13px; }
       .card {
-        max-width: 600px;
+        max-width: 700px;
         margin: 24px auto;
         background: #fff;
         border-radius: 8px;
         box-shadow: 0 1px 3px rgba(33, 36, 61, 0.08);
         overflow: hidden;
       }
-      .card-section {
-        padding: 20px 24px;
-      }
-      .card-section + .card-section {
-        border-top: 1px solid #ebeef6;
-      }
+      .card-section { padding: 20px 24px; }
+      .card-section + .card-section { border-top: 1px solid #ebeef6; }
       .section-label {
         font-size: 11px;
         font-weight: 600;
@@ -61,14 +34,8 @@
         color: #848ab8;
         margin-bottom: 14px;
       }
-
-      /* Fields */
-      .field {
-        margin-bottom: 14px;
-      }
-      .field:last-child {
-        margin-bottom: 0;
-      }
+      .field { margin-bottom: 14px; }
+      .field:last-child { margin-bottom: 0; }
       .field label {
         display: block;
         font-size: 13px;
@@ -99,12 +66,6 @@
         border-color: #5468ff;
         box-shadow: 0 0 0 3px rgba(84, 104, 255, 0.1);
       }
-      .field input[type="text"]::placeholder,
-      .field input[type="password"]::placeholder {
-        color: #b6bbd4;
-      }
-
-      /* Toggle */
       .toggle-row {
         display: flex;
         align-items: center;
@@ -121,11 +82,7 @@
         width: 40px;
         height: 22px;
       }
-      .toggle input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-      }
+      .toggle input { opacity: 0; width: 0; height: 0; }
       .toggle .slider {
         position: absolute;
         cursor: pointer;
@@ -146,14 +103,8 @@
         transition: transform 0.2s;
         box-shadow: 0 1px 2px rgba(0,0,0,0.15);
       }
-      .toggle input:checked + .slider {
-        background: #5468ff;
-      }
-      .toggle input:checked + .slider::before {
-        transform: translateX(18px);
-      }
-
-      /* Button */
+      .toggle input:checked + .slider { background: #5468ff; }
+      .toggle input:checked + .slider::before { transform: translateX(18px); }
       .btn {
         font-size: 13px;
         font-weight: 600;
@@ -166,36 +117,19 @@
         background: #5468ff;
         color: #fff;
       }
-      .btn:hover:not(:disabled) {
-        background: #3c4fe0;
-      }
-      .btn:active {
-        transform: scale(0.98);
-      }
-      .btn:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-
-      /* Status */
-      .status {
-        font-size: 13px;
-        margin-top: 12px;
-        min-height: 18px;
-      }
-      .status.ok {
-        color: #36b37e;
-      }
-      .status.err {
-        color: #e2294b;
-      }
+      .btn:hover:not(:disabled) { background: #3c4fe0; }
+      .btn:active { transform: scale(0.98); }
+      .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      .status { font-size: 13px; margin-top: 12px; min-height: 18px; }
+      .status.ok { color: #36b37e; }
+      .status.err { color: #e2294b; }
     </style>
   </head>
   <body>
     <div class="header">
       <div class="header-inner">
         <h1>Algolia Category Helper</h1>
-        <p>Configure your index connection and field mapping for the Query Categorization dashboard.</p>
+        <p>Configure your index connection and field mapping for the Algolia dashboard.</p>
       </div>
     </div>
 
@@ -220,8 +154,8 @@
         <div class="section-label">Field Mapping</div>
         <div class="field">
           <label>Filter Field</label>
-          <input type="text" id="filterField" placeholder="e.g. facets.id" />
-          <div class="hint">Attribute used to look up a category ID in your index. Comma-separated for multiple fields.</div>
+          <input type="text" id="filterField" placeholder="e.g. facets.categories" />
+          <div class="hint">Attribute used to look up a category ID in your index.</div>
         </div>
         <div class="field">
           <label>Category Name Paths</label>

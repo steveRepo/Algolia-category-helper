@@ -94,3 +94,41 @@ Refresh the Algolia dashboard tab, or click **Refresh Page** in the popup.
 - All API calls are made over HTTPS directly to Algolia's servers
 - Field paths are validated to prevent injection
 - The extension only runs on `dashboard.algolia.com`
+
+
+## Merch Studio support
+
+This build also supports selected Algolia Merch Studio pages:
+
+- Visualize pages with active `refinementList[...]` URL filters
+- Analytics → Category Pages tables
+- Analytics → Search → Grouped Searches
+
+On these pages, the extension detects category text from the page structure or URL refinements and adds lightweight metadata/highlighting to the matching category labels.
+
+
+## OpenAI mapping assist
+
+The popup now includes an optional OpenAI-assisted field suggestion flow.
+
+1. Paste a representative sample record into the popup.
+2. Add an OpenAI API key and model.
+3. Click **Suggest fields**.
+4. Review the recommended filter field and category name paths.
+5. Click **Apply suggestion** to populate the form, then **Save**.
+
+This is intended to help identify likely dot-notation paths for category IDs and human-readable category labels from a copied record structure.
+
+
+## v1.4 hardening and Merch Studio updates
+
+- Removed direct OpenAI API calls from the extension.
+- Removed OpenAI API key storage from the extension.
+- Added a safer AI-assist flow that copies a structured prompt for use in ChatGPT, then lets you paste the JSON suggestion back into the popup.
+- Restricted extension storage access to trusted extension contexts where supported.
+- Reduced requested permissions and host permissions.
+- Added popup diagnostics and error feedback for the current page.
+- Expanded Merch Studio support to detect and replace raw category IDs in:
+  - category chooser dialogs
+  - category facet lists
+  - compact category badge rows on visualize pages

@@ -1,16 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Algolia Category Helper",
-  "version": "1.2",
-  "description": "Map numeric/category IDs to labels on Algolia Query Categorization pages using local JSON or Algolia API.",
+  "version": "1.4",
+  "description": "Map category IDs to labels on Algolia dashboard pages with Merch Studio support.",
   "permissions": [
     "storage",
-    "activeTab",
-    "scripting"
+    "activeTab"
   ],
   "host_permissions": [
-    "https://*.algolia.net/*",
-    "https://*.algolia.com/*"
+    "https://*.algolia.net/*"
   ],
   "icons": {
     "16": "icon16.png",

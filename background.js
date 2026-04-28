@@ -1,295 +1,383 @@
 
 // background.js (MV3 service worker)
 
-// Keys we use in chrome.storage
 const STORAGE_KEYS = {
   CONFIG: 'algoliaCategoryHelper_config',
   MAPPINGS: 'algoliaCategoryHelper_mappings'
 };
 
-// Security: max IDs per single lookup request to prevent quota abuse
-const MAX_IDS_PER_REQUEST = 100;
-// Rate limit: minimum ms between batch API calls
+const MAX_IDS_PER_REQUEST = 120;
 const BATCH_DELAY_MS = 200;
+const pageStatusByTab = new Map();
 
-// Validate that a field path only contains safe characters: a-z, 0-9, dots, underscores, commas, hyphens
+function defaultConfig() {
+  return {
+    appId: '',
+    apiKey: '',
+    indexName: '',
+    filterField: '',
+    categoryPaths: '',
+    enabled: false
+  };
+}
+
+async function setStorageAccessLevels() {
+  try {
+    if (chrome.storage?.local?.setAccessLevel) {
+      await chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
+    }
+  } catch (e) {
+    // ignore access-level errors on older Chrome builds
+  }
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  setStorageAccessLevels();
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  setStorageAccessLevels();
+});
+
+setStorageAccessLevels();
+
 function isValidFieldPath(path) {
   if (!path || typeof path !== 'string') return false;
   return /^[a-zA-Z0-9._,\-]+$/.test(path.trim());
 }
 
-// Helper to get config & mappings
 async function getState() {
   return new Promise((resolve) => {
     chrome.storage.local.get([STORAGE_KEYS.CONFIG, STORAGE_KEYS.MAPPINGS], (res) => {
       resolve({
-        config: res[STORAGE_KEYS.CONFIG] || {
-          appId: '',
-          apiKey: '',
-          indexName: '',
-          filterField: '',
-          categoryPaths: '',
-          enabled: false
-        },
+        config: res[STORAGE_KEYS.CONFIG] || defaultConfig(),
         mappings: res[STORAGE_KEYS.MAPPINGS] || {}
       });
     });
   });
 }
 
-async function setMappings(newMappings) {
-  return new Promise((resolve) => {
-    chrome.storage.local.set({ [STORAGE_KEYS.MAPPINGS]: newMappings }, () => resolve());
+async function setConfig(config) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set({ [STORAGE_KEYS.CONFIG]: config }, () => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+      } else {
+        resolve();
+      }
+    });
   });
 }
 
-// Delay helper for rate limiting
+async function setMappings(newMappings) {
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set({ [STORAGE_KEYS.MAPPINGS]: newMappings }, () => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Listen for messages from content-script & popup/options
+function sanitizeIds(rawIds) {
+  if (!Array.isArray(rawIds)) return [];
+  return rawIds
+    .filter((id) => typeof id === 'string' && id.length > 0 && id.length <= 200)
+    .map((id) => id.trim())
+    .filter((id) => /^[a-zA-Z0-9_\-]+$/.test(id));
+}
+
+function buildAiPrompt(sampleRecordText) {
+  return [
+    'You are helping configure an Algolia browser extension.',
+    'Analyze the sample Algolia record below and identify the most likely attribute paths for:',
+    '1. filterField: the field or fields that contain the category identifier used for matching.',
+    '2. categoryPaths: one or more field paths that contain the human-readable category label or hierarchy.',
+    '',
+    'Rules:',
+    '- Only use fields that actually exist in the sample record.',
+    '- Use dot-notation paths only.',
+    '- Prefer fields that are stable and suitable for exact category ID lookup.',
+    '- Prefer label paths that clearly contain category names or hierarchies.',
+    '- If you are unsure, include warnings.',
+    '- Return strict JSON with this exact shape:',
+    '{',
+    '  "recommendedFilterField": "field.path,optional.second.path",',
+    '  "recommendedCategoryPaths": ["field.path", "field.otherPath"],',
+    '  "filterFieldCandidates": [{"path": "field.path", "why": "reason"}],',
+    '  "categoryPathCandidates": [{"path": "field.path", "why": "reason"}],',
+    '  "reasoningSummary": "short explanation",',
+    '  "warnings": ["warning 1"]',
+    '}',
+    '',
+    'Sample record:',
+    sampleRecordText
+  ].join('\n');
+}
+
+function validateConfig(config) {
+  if (config.enabled) {
+    if (!config.appId || !config.apiKey || !config.indexName) {
+      return 'Application ID, API Key, and Index Name are required when enabled.';
+    }
+    if (!config.filterField) {
+      return 'Filter field is required when enabled.';
+    }
+    if (!config.categoryPaths) {
+      return 'Category name paths are required when enabled.';
+    }
+  }
+
+  if (config.filterField && !isValidFieldPath(config.filterField)) {
+    return 'Filter field contains invalid characters. Only letters, numbers, dots, underscores, commas, and hyphens are allowed.';
+  }
+  if (config.categoryPaths && !isValidFieldPath(config.categoryPaths)) {
+    return 'Category paths contain invalid characters. Only letters, numbers, dots, underscores, commas, and hyphens are allowed.';
+  }
+
+  return null;
+}
+
+async function performAlgoliaLookup(config, existingMappings, rawIds) {
+  const idsToFetch = sanitizeIds(rawIds)
+    .filter((id) => !existingMappings[id])
+    .slice(0, MAX_IDS_PER_REQUEST);
+
+  if (!idsToFetch.length) {
+    return { success: true, labels: existingMappings, fetched: {} };
+  }
+
+  const BATCH_SIZE = 20;
+  const newLabels = {};
+  const filterParts = String(config.filterField || '')
+    .split(',')
+    .map((f) => f.trim())
+    .filter(Boolean);
+  const pathsArray = String(config.categoryPaths || '')
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  if (!filterParts.length || !pathsArray.length) {
+    return { success: false, error: 'Config not complete or extension disabled.' };
+  }
+
+  try {
+    for (let i = 0; i < idsToFetch.length; i += BATCH_SIZE) {
+      const batch = idsToFetch.slice(i, i + BATCH_SIZE);
+      if (i > 0) {
+        await delay(BATCH_DELAY_MS);
+      }
+
+      const requests = batch.map((id) => {
+        const filters = filterParts.map((field) => `${field}:"${id}"`).join(' OR ');
+        const params = new URLSearchParams({
+          hitsPerPage: '1',
+          attributesToRetrieve: pathsArray.join(','),
+          filters
+        });
+
+        return {
+          indexName: config.indexName,
+          params: params.toString()
+        };
+      });
+
+      const res = await fetch(`https://${config.appId}-dsn.algolia.net/1/indexes/*/queries`, {
+        method: 'POST',
+        headers: {
+          'X-Algolia-Application-Id': config.appId,
+          'X-Algolia-API-Key': config.apiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ requests })
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => '');
+        return {
+          success: false,
+          error: `Algolia lookup failed with status ${res.status}${errorText ? `: ${errorText.slice(0, 200)}` : ''}`
+        };
+      }
+
+      const data = await res.json();
+      const results = Array.isArray(data.results) ? data.results : [];
+
+      results.forEach((result, idx) => {
+        const id = batch[idx];
+        const hit = result?.hits?.[0];
+        if (!hit) return;
+
+        let label = null;
+
+        for (const path of pathsArray) {
+          if (label) break;
+
+          const parts = path.split('.');
+          let value = hit;
+          for (const part of parts) {
+            if (value && typeof value === 'object') {
+              value = value[part];
+            } else {
+              value = null;
+              break;
+            }
+          }
+
+          if (!value) continue;
+
+          if (Array.isArray(value)) {
+            const match = value.find((item) => item && String(item.id) === String(id));
+            if (match && match.name) {
+              label = String(match.name);
+              continue;
+            }
+
+            for (const nested of value) {
+              if (Array.isArray(nested)) {
+                const nestedMatch = nested.find((item) => item && String(item.id) === String(id));
+                if (nestedMatch && nestedMatch.name) {
+                  label = String(nestedMatch.name);
+                  break;
+                }
+              }
+            }
+          } else if (value && typeof value === 'object' && String(value.id) === String(id)) {
+            label = value.name ? String(value.name) : null;
+          } else if (typeof value === 'string') {
+            label = value;
+          }
+        }
+
+        if (label && typeof label === 'string' && label.length <= 500) {
+          newLabels[id] = label;
+        }
+      });
+    }
+
+    const updated = { ...existingMappings, ...newLabels };
+    await setMappings(updated);
+
+    return { success: true, labels: updated, fetched: newLabels };
+  } catch (e) {
+    return { success: false, error: e?.message || 'Lookup failed.' };
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  // Security: only accept messages from this extension
   if (sender.id !== chrome.runtime.id) {
-    sendResponse({ success: false, error: 'Unauthorized sender' });
+    sendResponse({ success: false, error: 'Unauthorized sender.' });
     return true;
   }
 
   (async () => {
     if (msg.type === 'GET_STATE') {
+      if (sender.tab) {
+        sendResponse({ success: false, error: 'GET_STATE is not available to content scripts.' });
+        return;
+      }
       const state = await getState();
       sendResponse({ success: true, state });
       return;
     }
 
-    if (msg.type === 'SAVE_CONFIG') {
-      try {
-        const current = await getState();
-        const config = { ...current.config, ...msg.config };
-
-        // Validate config
-        if (config.enabled) {
-          if (!config.appId || !config.apiKey || !config.indexName) {
-            sendResponse({
-              success: false,
-              error: 'Application ID, API Key, and Index Name are required when enabled'
-            });
-            return;
-          }
-
-          // Validate field paths contain only safe characters
-          if (config.filterField && !isValidFieldPath(config.filterField)) {
-            sendResponse({
-              success: false,
-              error: 'Filter field contains invalid characters. Only letters, numbers, dots, underscores, commas, and hyphens are allowed.'
-            });
-            return;
-          }
-          if (config.categoryPaths && !isValidFieldPath(config.categoryPaths)) {
-            sendResponse({
-              success: false,
-              error: 'Category paths contain invalid characters. Only letters, numbers, dots, underscores, commas, and hyphens are allowed.'
-            });
-            return;
-          }
+    if (msg.type === 'GET_PUBLIC_STATE') {
+      const state = await getState();
+      sendResponse({
+        success: true,
+        state: {
+          enabled: !!state.config.enabled,
+          mappings: state.mappings || {}
         }
+      });
+      return;
+    }
 
-        await new Promise((resolve, reject) => {
-          chrome.storage.local.set({ [STORAGE_KEYS.CONFIG]: config }, () => {
-            if (chrome.runtime.lastError) {
-              reject(new Error(chrome.runtime.lastError.message));
-            } else {
-              resolve();
-            }
-          });
-        });
+    if (msg.type === 'SAVE_CONFIG') {
+      const current = await getState();
+      const nextConfig = { ...current.config, ...msg.config };
+      const validationError = validateConfig(nextConfig);
 
+      if (validationError) {
+        sendResponse({ success: false, error: validationError });
+        return;
+      }
+
+      try {
+        await setConfig(nextConfig);
         sendResponse({ success: true });
       } catch (e) {
-        sendResponse({ success: false, error: e.message });
+        sendResponse({ success: false, error: e?.message || 'Failed to save config.' });
       }
       return;
     }
 
     if (msg.type === 'ALGOLIA_LOOKUP') {
       const { config, mappings } = await getState();
+
       if (!config.enabled || !config.appId || !config.apiKey || !config.indexName || !config.filterField || !config.categoryPaths) {
         sendResponse({ success: false, error: 'Config not complete or extension disabled.' });
         return;
       }
 
-      // Validate field paths before making API calls
-      if (!isValidFieldPath(config.filterField) || !isValidFieldPath(config.categoryPaths)) {
-        sendResponse({ success: false, error: 'Invalid field paths in config.' });
+      const validationError = validateConfig(config);
+      if (validationError) {
+        sendResponse({ success: false, error: validationError });
         return;
       }
 
-      // Security: validate msg.ids is an array of strings, sanitise values
-      const rawIds = msg.ids;
-      if (!Array.isArray(rawIds)) {
-        sendResponse({ success: false, error: 'Invalid IDs format.' });
-        return;
-      }
-
-      const sanitisedIds = rawIds
-        .filter((id) => typeof id === 'string' && id.length > 0 && id.length <= 200)
-        .map((id) => id.trim())
-        .filter((id) => /^[a-zA-Z0-9_\-]+$/.test(id));
-
-      const idsToFetch = sanitisedIds
-        .filter((id) => !mappings[id])
-        .slice(0, MAX_IDS_PER_REQUEST); // Cap to prevent quota abuse
-
-      if (!idsToFetch.length) {
-        sendResponse({ success: true, labels: mappings });
-        return;
-      }
-
-      // Algolia multi-query API has limits, so batch requests
-      const BATCH_SIZE = 20;
-      const newLabels = {};
-
-      try {
-
-        for (let i = 0; i < idsToFetch.length; i += BATCH_SIZE) {
-          const batch = idsToFetch.slice(i, i + BATCH_SIZE);
-
-          // Rate limit: delay between batches (skip delay on first batch)
-          if (i > 0) {
-            await delay(BATCH_DELAY_MS);
-          }
-
-          // Build multi-query: one query per ID, using configurable filter field
-          const filterField = config.filterField;
-          const categoryPaths = config.categoryPaths;
-          const pathsArray = categoryPaths.split(',').map(p => p.trim()).filter(p => p);
-
-          const requests = batch.map((id) => {
-            // Build filter - support multiple filter fields
-            const filterParts = filterField.split(',').map(f => f.trim()).filter(f => f);
-            const filters = filterParts.map(field => `${field}:"${id}"`).join(' OR ');
-
-            const params = new URLSearchParams({
-              hitsPerPage: '1',
-              attributesToRetrieve: pathsArray.join(','),
-              filters: filters
-            });
-            return {
-              indexName: config.indexName,
-              params: params.toString()
-            };
-          });
-
-          const url = `https://${config.appId}-dsn.algolia.net/1/indexes/*/queries`;
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: {
-              'X-Algolia-Application-Id': config.appId,
-              'X-Algolia-API-Key': config.apiKey,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ requests })
-          });
-
-          if (!res.ok) {
-            // Continue with other batches even if one fails
-            continue;
-          }
-
-          const data = await res.json();
-          const results = data.results || [];
-
-          // Extract labels from this batch using configured paths
-          results.forEach((r, idx) => {
-            const id = batch[idx];
-            if (!r || !Array.isArray(r.hits)) return;
-            const hit = r.hits[0] || null;
-            if (!hit) return;
-
-            let label = null;
-
-            // Try each configured path
-            for (const path of pathsArray) {
-              if (label) break;
-
-              // Navigate to the field using dot notation
-              const parts = path.split('.');
-              let value = hit;
-              for (const part of parts) {
-                if (value && typeof value === 'object') {
-                  value = value[part];
-                } else {
-                  value = null;
-                  break;
-                }
-              }
-
-              if (!value) continue;
-
-              // If it's an array of objects with id/name
-              if (Array.isArray(value)) {
-                // Try flat array first
-                const match = value.find((item) => item && String(item.id) === String(id));
-                if (match && match.name) {
-                  label = String(match.name);
-                  continue;
-                }
-
-                // Try nested arrays (like categoriesHierarchy)
-                for (const subArray of value) {
-                  if (Array.isArray(subArray)) {
-                    const nestedMatch = subArray.find((item) => item && String(item.id) === String(id));
-                    if (nestedMatch && nestedMatch.name) {
-                      label = String(nestedMatch.name);
-                      break;
-                    }
-                  }
-                }
-              }
-              // If it's a simple object with id/name
-              else if (value && typeof value === 'object' && String(value.id) === String(id)) {
-                label = value.name ? String(value.name) : null;
-              }
-              // If it's just a string value
-              else if (typeof value === 'string') {
-                label = value;
-              }
-            }
-
-            // Sanitise label: must be a non-empty string, cap length
-            if (label && typeof label === 'string' && label.length <= 500) {
-              newLabels[id] = label;
-            }
-          });
-        }
-
-
-        const updated = { ...mappings, ...newLabels };
-        await setMappings(updated);
-
-        // Update badge if we have at least one mapping
-        try {
-          const total = Object.keys(updated).length;
-          chrome.action.setBadgeText({ text: total ? 'ON' : '' });
-          if (total) {
-            chrome.action.setBadgeBackgroundColor({ color: '#5468ff' });
-          }
-        } catch (e) {
-          // ignore in older browsers
-        }
-
-        sendResponse({ success: true, labels: updated, fetched: newLabels });
-      } catch (e) {
-        sendResponse({ success: false, error: 'Lookup failed' });
-      }
-
+      const result = await performAlgoliaLookup(config, mappings, msg.ids);
+      sendResponse(result);
       return;
     }
 
-    sendResponse({ success: false, error: 'Unknown message type' });
+    if (msg.type === 'BUILD_AI_PROMPT') {
+      const sampleRecord = String(msg.sampleRecord || '').trim();
+      if (!sampleRecord) {
+        sendResponse({ success: false, error: 'Paste a sample record first.' });
+        return;
+      }
+      sendResponse({ success: true, prompt: buildAiPrompt(sampleRecord) });
+      return;
+    }
+
+    if (msg.type === 'REPORT_PAGE_STATUS') {
+      const tabId = sender.tab?.id;
+      if (typeof tabId === 'number') {
+        pageStatusByTab.set(tabId, {
+          ...msg.status,
+          tabId,
+          url: sender.tab?.url || '',
+          updatedAt: new Date().toISOString()
+        });
+      }
+      sendResponse({ success: true });
+      return;
+    }
+
+    if (msg.type === 'GET_PAGE_STATUS') {
+      const tabId = typeof msg.tabId === 'number' ? msg.tabId : sender.tab?.id;
+      if (typeof tabId !== 'number') {
+        sendResponse({ success: false, error: 'No tab available.' });
+        return;
+      }
+
+      sendResponse({
+        success: true,
+        status: pageStatusByTab.get(tabId) || null
+      });
+      return;
+    }
+
+    sendResponse({ success: false, error: 'Unknown message type.' });
   })();
 
-  // Keep channel open for async response
   return true;
 });
